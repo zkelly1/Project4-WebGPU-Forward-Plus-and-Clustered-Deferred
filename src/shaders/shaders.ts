@@ -1,7 +1,5 @@
 // CHECKITOUT: this file loads all the shaders and preprocesses them with some common code
 
-import { Camera } from '../stage/camera';
-
 import commonRaw from './common.wgsl?raw';
 
 import naiveVertRaw from './naive.vs.wgsl?raw';
@@ -15,6 +13,7 @@ import clusteredDeferredFullscreenFragRaw from './clustered_deferred_fullscreen.
 
 import moveLightsComputeRaw from './move_lights.cs.wgsl?raw';
 import clusteringComputeRaw from './clustering.cs.wgsl?raw';
+import clusterDebugFragRaw from './cluster_debug.fs.wgsl?raw';
 
 // CONSTANTS (for use in shaders)
 // =================================
@@ -29,6 +28,11 @@ export const constants = {
     bindGroup_material: 2,
 
     moveLightsWorkgroupSize: 128,
+    clusteringWorkgroupSize: 64,
+    clusterCountX: 16,
+    clusterCountY: 9,
+    clusterCountZ: 24,
+    maxLights: 5000,
 
     lightRadius: 2
 };
@@ -56,3 +60,4 @@ export const clusteredDeferredFullscreenFragSrc: string = processShaderRaw(clust
 
 export const moveLightsComputeSrc: string = processShaderRaw(moveLightsComputeRaw);
 export const clusteringComputeSrc: string = processShaderRaw(clusteringComputeRaw);
+export const clusterDebugFragSrc: string = processShaderRaw(clusterDebugFragRaw);

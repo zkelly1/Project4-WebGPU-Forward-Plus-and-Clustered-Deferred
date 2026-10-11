@@ -10,6 +10,7 @@ export class NaiveRenderer extends renderer.Renderer {
     depthTextureView: GPUTextureView;
 
     pipeline: GPURenderPipeline;
+    clusterDebugPipeline: GPURenderPipeline;
 
     constructor(stage: Stage) {
         super(stage);
@@ -17,9 +18,18 @@ export class NaiveRenderer extends renderer.Renderer {
         this.sceneUniformsBindGroupLayout = renderer.device.createBindGroupLayout({
             label: "scene uniforms bind group layout",
             entries: [
-                // TODO-1.2: add an entry for camera uniforms at binding 0, visible to only the vertex shader, and of type "uniform"
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                    buffer: { type: "uniform" }
+                },
                 { // lightSet
                     binding: 1,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    buffer: { type: "read-only-storage" }
+                },
+                {
+                    binding: 2,
                     visibility: GPUShaderStage.FRAGMENT,
                     buffer: { type: "read-only-storage" }
                 }
@@ -30,12 +40,17 @@ export class NaiveRenderer extends renderer.Renderer {
             label: "scene uniforms bind group",
             layout: this.sceneUniformsBindGroupLayout,
             entries: [
-                // TODO-1.2: add an entry for camera uniforms at binding 0
-                // you can access the camera using `this.camera`
-                // if you run into TypeScript errors, you're probably trying to upload the host buffer instead
+                {
+                    binding: 0,
+                    resource: { buffer: this.camera.uniformsBuffer }
+                },
                 {
                     binding: 1,
                     resource: { buffer: this.lights.lightSetStorageBuffer }
+                },
+                {
+                    binding: 2,
+                    resource: { buffer: this.lights.clusterSetStorageBuffer }
                 }
             ]
         });
@@ -47,7 +62,13 @@ export class NaiveRenderer extends renderer.Renderer {
         });
         this.depthTextureView = this.depthTexture.createView();
 
-        this.pipeline = renderer.device.createRenderPipeline({
+        this.pipeline = this.createPipeline(shaders.naiveFragSrc, "naive");
+        this.clusterDebugPipeline = this.createPipeline(shaders.clusterDebugFragSrc, "cluster debug");
+    }
+
+    private createPipeline(fragmentSource: string, label: string) {
+        return renderer.device.createRenderPipeline({
+            label: label,
             layout: renderer.device.createPipelineLayout({
                 label: "naive pipeline layout",
                 bindGroupLayouts: [
@@ -70,8 +91,8 @@ export class NaiveRenderer extends renderer.Renderer {
             },
             fragment: {
                 module: renderer.device.createShaderModule({
-                    label: "naive frag shader",
-                    code: shaders.naiveFragSrc,
+                    label: label + " frag shader",
+                    code: fragmentSource,
                 }),
                 targets: [
                     {
@@ -85,6 +106,10 @@ export class NaiveRenderer extends renderer.Renderer {
     override draw() {
         const encoder = renderer.device.createCommandEncoder();
         const canvasTextureView = renderer.context.getCurrentTexture().createView();
+
+        if (this.lights.showClusters) {
+            this.lights.doLightClustering(encoder);
+        }
 
         const renderPass = encoder.beginRenderPass({
             label: "naive render pass",
@@ -103,9 +128,9 @@ export class NaiveRenderer extends renderer.Renderer {
                 depthStoreOp: "store"
             }
         });
-        renderPass.setPipeline(this.pipeline);
+        renderPass.setPipeline(this.lights.showClusters ? this.clusterDebugPipeline : this.pipeline);
 
-        // TODO-1.2: bind `this.sceneUniformsBindGroup` to index `shaders.constants.bindGroup_scene`
+        renderPass.setBindGroup(shaders.constants.bindGroup_scene, this.sceneUniformsBindGroup);
 
         this.scene.iterate(node => {
             renderPass.setBindGroup(shaders.constants.bindGroup_model, node.modelBindGroup);
