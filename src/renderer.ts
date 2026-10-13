@@ -2,11 +2,14 @@ import { Scene } from './stage/scene';
 import { Lights } from './stage/lights';
 import { Camera } from './stage/camera';
 import { Stage } from './stage/stage';
+import { GpuTimer } from './timer';
 
 export var canvas: HTMLCanvasElement;
 export var canvasFormat: GPUTextureFormat;
 export var context: GPUCanvasContext;
 export var device: GPUDevice;
+export var adapterInfo: GPUAdapterInfo;
+export var gpuTimer: GpuTimer;
 export var canvasTextureView: GPUTextureView;
 
 export var aspectRatio: number;
@@ -41,7 +44,11 @@ export async function initWebGPU() {
         throw new Error("no appropriate GPUAdapter found");
     }
 
-    device = await adapter.requestDevice();
+    adapterInfo = adapter.info;
+    device = await adapter.requestDevice({
+        requiredFeatures: adapter.features.has('timestamp-query') ? ['timestamp-query'] : []
+    });
+    gpuTimer = new GpuTimer(device);
 
     context = canvas.getContext("webgpu")!;
     canvasFormat = navigator.gpu.getPreferredCanvasFormat();
@@ -102,6 +109,8 @@ export const vertexBufferLayout: GPUVertexBufferLayout = {
 };
 
 export abstract class Renderer {
+    useBundles = true;
+    private bundles = new Map<GPURenderPipeline, GPURenderBundle>();
     protected scene: Scene;
     protected lights: Lights;
     protected camera: Camera;
@@ -122,6 +131,34 @@ export abstract class Renderer {
 
     stop(): void {
         cancelAnimationFrame(this.frameRequestId);
+    }
+
+    destroy(): void {
+        this.stop();
+        this.bundles.clear();
+    }
+
+    protected drawScene(pass: GPURenderPassEncoder, pipeline: GPURenderPipeline,
+        sceneBindGroup: GPUBindGroup, colorFormats: GPUTextureFormat[]) {
+        const record = (target: GPURenderPassEncoder | GPURenderBundleEncoder) => {
+            target.setPipeline(pipeline);
+            target.setBindGroup(0, sceneBindGroup);
+            this.scene.iterate(node => target.setBindGroup(1, node.modelBindGroup),
+                material => target.setBindGroup(2, material.materialBindGroup), primitive => {
+                    target.setVertexBuffer(0, primitive.vertexBuffer);
+                    target.setIndexBuffer(primitive.indexBuffer, 'uint32');
+                    target.drawIndexed(primitive.numIndices);
+                });
+        };
+        if (!this.useBundles) { record(pass); return; }
+        let bundle = this.bundles.get(pipeline);
+        if (!bundle) {
+            const encoder = device.createRenderBundleEncoder({ colorFormats, depthStencilFormat: 'depth24plus' });
+            record(encoder);
+            bundle = encoder.finish();
+            this.bundles.set(pipeline, bundle);
+        }
+        pass.executeBundles([bundle]);
     }
 
     protected abstract draw(): void;

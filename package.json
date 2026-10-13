@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --open",
-    "build": "vite build && cp -r scenes/ dist/"
+    "build": "tsc --noEmit && vite build && node scripts/copy-assets.mjs",
+    "typecheck": "tsc --noEmit",
+    "validate:serve": "vite --config vite.validation.config.ts"
   },
   "devDependencies": {
     "@types/dat.gui": "^0.7.13",

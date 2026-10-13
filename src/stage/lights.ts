@@ -1,5 +1,5 @@
 import { vec3 } from "wgpu-matrix";
-import { device } from "../renderer";
+import { device, gpuTimer } from "../renderer";
 
 import * as shaders from '../shaders/shaders';
 import { Camera } from "./camera";
@@ -151,7 +151,7 @@ export class Lights {
     }
 
     doLightClustering(encoder: GPUCommandEncoder) {
-        const pass = encoder.beginComputePass({ label: "light clustering" });
+        const pass = encoder.beginComputePass({ label: "light clustering", timestampWrites: gpuTimer.pass("clustering") });
         pass.setPipeline(this.clusteringPipeline);
         pass.setBindGroup(0, this.clusteringBindGroup);
         pass.dispatchWorkgroups(Math.ceil(Lights.numClusters / shaders.constants.clusteringWorkgroupSize));

@@ -103,7 +103,13 @@ export class NaiveRenderer extends renderer.Renderer {
         });
     }
 
+    override destroy() {
+        super.destroy();
+        this.depthTexture.destroy();
+    }
+
     override draw() {
+        renderer.gpuTimer.begin();
         const encoder = renderer.device.createCommandEncoder();
         const canvasTextureView = renderer.context.getCurrentTexture().createView();
 
@@ -113,6 +119,7 @@ export class NaiveRenderer extends renderer.Renderer {
 
         const renderPass = encoder.beginRenderPass({
             label: "naive render pass",
+            timestampWrites: renderer.gpuTimer.pass("geometry"),
             colorAttachments: [
                 {
                     view: canvasTextureView,
@@ -128,22 +135,12 @@ export class NaiveRenderer extends renderer.Renderer {
                 depthStoreOp: "store"
             }
         });
-        renderPass.setPipeline(this.lights.showClusters ? this.clusterDebugPipeline : this.pipeline);
-
-        renderPass.setBindGroup(shaders.constants.bindGroup_scene, this.sceneUniformsBindGroup);
-
-        this.scene.iterate(node => {
-            renderPass.setBindGroup(shaders.constants.bindGroup_model, node.modelBindGroup);
-        }, material => {
-            renderPass.setBindGroup(shaders.constants.bindGroup_material, material.materialBindGroup);
-        }, primitive => {
-            renderPass.setVertexBuffer(0, primitive.vertexBuffer);
-            renderPass.setIndexBuffer(primitive.indexBuffer, 'uint32');
-            renderPass.drawIndexed(primitive.numIndices);
-        });
+        this.drawScene(renderPass, this.lights.showClusters ? this.clusterDebugPipeline : this.pipeline,
+            this.sceneUniformsBindGroup, [renderer.canvasFormat]);
 
         renderPass.end();
 
+        renderer.gpuTimer.resolve(encoder);
         renderer.device.queue.submit([encoder.finish()]);
     }
 }

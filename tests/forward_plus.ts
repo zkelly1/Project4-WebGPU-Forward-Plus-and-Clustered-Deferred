@@ -48,8 +48,14 @@ async function compare(stage: Stage, name: string) {
     const forward = new ForwardPlusRenderer(stage);
     forward.stop();
     try {
+        naive.useBundles = false;
         const baseline = await capture(naive);
         const clustered = await capture(forward);
+        forward.useBundles = false;
+        const direct = await capture(forward);
+        if (direct.some((value, index) => value !== clustered[index])) {
+            throw new Error(name + ': render bundles changed the image');
+        }
         let maxDifference = 0;
         let differentPixels = 0;
         let litPixels = 0;
@@ -67,8 +73,8 @@ async function compare(stage: Stage, name: string) {
         if (stage.lights.numLights > 0 && litPixels === 0) throw new Error(`${name}: empty baseline image`);
         report(`PASS ${name}: max channel difference ${maxDifference}/255, ${litPixels} lit pixels`);
     } finally {
-        naive.depthTexture.destroy();
-        forward.depthTexture.destroy();
+        naive.destroy();
+        forward.destroy();
     }
 }
 
